@@ -22,6 +22,7 @@ The pipeline addresses a fundamental limitation in current protein structure pre
 |----------|-------------|
 | [Installation Guide](installation.md) | System requirements, dependencies, and setup instructions |
 | [Quick Start Guide](quickstart.md) | Get running with CombFold in 10 minutes |
+| [Docker Guide](docker.md) | Run CombFold + LocalColabFold in Docker containers |
 | [Pipeline Guide](pipeline.md) | Detailed walkthrough of all 4 pipeline stages |
 | [Python API Reference](python-api.md) | Documentation for all Python scripts and modules |
 | [C++ Architecture](cpp-architecture.md) | Technical details of the core assembly engine |

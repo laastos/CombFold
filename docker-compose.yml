@@ -1,0 +1,72 @@
+# ===============================================================
+# CombFold + LocalColabFold Docker Compose (Blackwell GPU Support)
+# ===============================================================
+# Uses NGC JAX 25.01 container with native Blackwell (CC 12.0) support
+#
+# Usage:
+#   docker-compose up -d          # Start container
+#   docker-compose run combfold   # Run interactively
+#   docker-compose down           # Stop container
+#
+# For GPU support, ensure nvidia-container-toolkit is installed
+
+services:
+  combfold:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: combfold:latest
+    container_name: combfold
+
+    # GPU Configuration - requires nvidia-container-toolkit
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+    # NGC container recommended settings
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
+
+    volumes:
+      # ColabFold model weights cache (download once, reuse)
+      - colabfold_cache:/cache
+
+      # User data directories
+      - ./data/input:/data/input:ro
+      - ./data/output:/data/output:rw
+      - ./data/pdbs:/data/pdbs:rw
+
+      # Optional: Mount local sequences directly
+      # - /path/to/your/fastas:/data/fastas:ro
+
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - XDG_CACHE_HOME=/cache
+      - MPLCONFIGDIR=/cache
+      # NGC JAX environment for Blackwell
+      - XLA_FLAGS=--xla_gpu_cuda_data_dir=/usr/local/cuda
+      - TF_FORCE_GPU_ALLOW_GROWTH=true
+      - TF_CPP_MIN_LOG_LEVEL=2
+
+    # Keep container running for interactive use
+    stdin_open: true
+    tty: true
+
+    # Resource limits (adjust based on your system)
+    # Recommended for dual RTX PRO 6000:
+    # mem_limit: 128g
+    # cpus: 32
+
+    working_dir: /data
+
+# Persistent volume for ColabFold weights (~5GB)
+volumes:
+  colabfold_cache:
+    name: combfold_colabfold_cache

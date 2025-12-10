@@ -230,6 +230,50 @@ CombFold requires AlphaFold-Multimer predictions as input. You have several opti
 | **Session Limits** | Yes (12h) | No | No | No |
 | **Best For** | Small projects, testing | Production, medium projects | Large-scale screens | Existing data |
 
+### Capacity and Sequence Limits
+
+| Capacity | ColabFold (Colab) | LocalColabFold | AlphaPullDown | Pre-computed |
+|----------|-------------------|----------------|---------------|--------------|
+| **Max Sequence Length** | ~1,800 residues* | ~3,000 residues** | ~4,000 residues** | N/A |
+| **Max Sequences per Job** | 1 | Unlimited (batch) | Unlimited (batch) | N/A |
+| **Predictions per Session** | 5-15 (depends on size) | Unlimited | Unlimited | N/A |
+| **Typical Time per Prediction** | 10-30 min | 5-20 min | 5-20 min | N/A |
+| **Parallel Predictions** | No | Yes (multi-GPU) | Yes (multi-GPU/nodes) | N/A |
+| **Queue/Batch Support** | No | Yes | Yes (SLURM) | N/A |
+
+*Free Colab tier with T4 GPU (16GB). Colab Pro with A100 can handle ~2,500 residues.
+
+**Depends on GPU VRAM: 12GB GPU (~1,800 res), 24GB GPU (~3,000 res), 40GB+ GPU (~4,000 res).
+
+### Sequence Size Guidelines by GPU
+
+| GPU VRAM | Max Total Residues | Example Complex |
+|----------|-------------------|-----------------|
+| 12 GB (RTX 3080) | ~1,800 | 2 subunits × 900 res |
+| 16 GB (T4, RTX 4080) | ~2,200 | 2 subunits × 1,100 res |
+| 24 GB (RTX 3090/4090) | ~3,000 | 3 subunits × 1,000 res |
+| 40 GB (A100-40GB) | ~4,000 | 4 subunits × 1,000 res |
+| 80 GB (A100-80GB) | ~6,000 | 4 subunits × 1,500 res |
+
+**Note:** These are approximate limits for multimer predictions. Actual limits depend on sequence composition and model version.
+
+### Number of Predictions Required
+
+The number of AFM predictions needed depends on your complex size:
+
+| Unique Subunits | Stage 2 (Pairs) | Stage 3 (Groups)* | Total Predictions |
+|-----------------|-----------------|-------------------|-------------------|
+| 2 | 3 | 1-3 | 4-6 |
+| 3 | 6 | 3-10 | 9-16 |
+| 5 | 15 | 10-30 | 25-45 |
+| 10 | 55 | 30-100 | 85-155 |
+| 15 | 120 | 50-200 | 170-320 |
+| 20 | 210 | 100-300 | 310-510 |
+
+*Stage 3 is optional but recommended for better accuracy. Numbers are estimates.
+
+**Formula for Stage 2 pairs:** `N × (N + 1) / 2` where N = number of unique subunits
+
 ### Which Option Should You Choose?
 
 | Use Case | Recommended Option | Why |

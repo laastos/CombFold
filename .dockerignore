@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+
+# Documentation (not needed in image)
+*.md
+!docs/*.md
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Build artifacts (will be rebuilt in container)
+CombinatorialAssembler/*.o
+CombinatorialAssembler/*.a
+CombinatorialAssembler/*.out
+CombinatorialAssembler/AF2trans/*.o
+CombinatorialAssembler/libs_gamb/*.o
+CombinatorialAssembler/libs_DockingLib/*.o
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/example outputs
+test_output/
+output/
+*_output/
+
+# Large data files
+*.pdb
+*.cif
+*.fasta
+data/
+
+# Paper resources (not needed for runtime)
+paper_resources/
