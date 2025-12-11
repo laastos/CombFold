@@ -123,13 +123,22 @@ def main():
     parser.add_argument("--output-fasta-folder", type=str)
     parser.add_argument("--max-af-size", type=int, default=1800)
     parser.add_argument("--input-pairs-results", type=str, default="")
+    parser.add_argument("--force", action="store_true", help="Overwrite existing output folder")
     args = parser.parse_args()
 
     subunits_info = read_subunits_info(args.subunits_json)
 
     if os.path.exists(args.output_fasta_folder):
-        print("Output folder already exists, exiting")
-        return
+        if args.force:
+            print(f"Output folder exists, overwriting (--force): {args.output_fasta_folder}")
+        else:
+            # Check if folder has any FASTA files
+            existing_fastas = [f for f in os.listdir(args.output_fasta_folder) if f.endswith('.fasta')]
+            if existing_fastas:
+                print(f"Output folder already exists with {len(existing_fastas)} FASTA file(s), skipping")
+                print("Use --force to regenerate")
+                return
+            print(f"Output folder exists but is empty, generating FASTAs")
     os.makedirs(args.output_fasta_folder, exist_ok=True)
 
     if args.stage == "pairs":

@@ -41,6 +41,7 @@ RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Mi
 
 # Create ColabFold environment
 # Note: We use a separate conda env to avoid conflicts with NGC's JAX
+# Pin JAX/Haiku versions for compatibility with ColabFold 1.5.5
 ENV PATH="/opt/conda/bin:${PATH}"
 RUN mamba create -y -n colabfold python=3.10 && \
     mamba install -y -n colabfold -c conda-forge -c bioconda \
@@ -51,6 +52,11 @@ RUN mamba create -y -n colabfold python=3.10 && \
     hhsuite \
     mmseqs2 \
     && mamba clean -afy
+
+# Fix JAX/Haiku version compatibility for ColabFold with CUDA support
+RUN /opt/conda/envs/colabfold/bin/pip install --no-cache-dir \
+    "jax[cuda12]==0.4.23" \
+    dm-haiku==0.0.12
 
 # Set up ColabFold environment paths
 ENV COLABFOLD_ENV="/opt/conda/envs/colabfold"

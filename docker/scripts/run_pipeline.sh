@@ -52,7 +52,8 @@ python3 /app/scripts/prepare_fastas.py \
     "$SUBUNITS_JSON" \
     --stage pairs \
     --output-fasta-folder "$OUTPUT_DIR/fasta_pairs" \
-    --max-af-size "$MAX_AF_SIZE"
+    --max-af-size "$MAX_AF_SIZE" \
+    --force
 
 # Count FASTA files
 FASTA_COUNT=$(ls -1 "$OUTPUT_DIR/fasta_pairs"/*.fasta 2>/dev/null | wc -l)
@@ -80,7 +81,8 @@ python3 /app/scripts/prepare_fastas.py \
     --stage groups \
     --output-fasta-folder "$OUTPUT_DIR/fasta_groups" \
     --max-af-size "$MAX_AF_SIZE" \
-    --input-pairs-results "$OUTPUT_DIR/afm_predictions" || echo "No groups generated (may be expected for small complexes)"
+    --input-pairs-results "$OUTPUT_DIR/afm_predictions" \
+    --force || echo "No groups generated (may be expected for small complexes)"
 
 # Run AFM on groups if any were generated
 GROUP_COUNT=$(ls -1 "$OUTPUT_DIR/fasta_groups"/*.fasta 2>/dev/null | wc -l)
