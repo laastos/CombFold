@@ -7,7 +7,7 @@
 # Build: docker build -t combfold:latest .
 # Run:   docker run --gpus all --ipc=host -it combfold:latest
 #
-FROM nvidia/cuda:12.4.0-cudnn-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04
 
 LABEL maintainer="CombFold Team"
 LABEL description="CombFold + ColabFold for large protein complex structure prediction (Blackwell GPU support)"
@@ -54,37 +54,42 @@ RUN wget -q https://mmseqs.com/latest/mmseqs-linux-avx2.tar.gz && \
     rm -rf mmseqs mmseqs-linux-avx2.tar.gz
 
 # ===============================================================
-# 2. Install JAX with CUDA support
+# 2. Install ColabFold and dependencies FIRST
 # ===============================================================
-# Install JAX 0.4.23 with CUDA 12 support (compatible with ColabFold)
-RUN pip install --no-cache-dir \
-    "jax[cuda12_pip]==0.4.23" \
-    -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-
-# Verify JAX installation
-RUN python3 -c "import jax; print('JAX version:', jax.__version__)"
-
-# ===============================================================
-# 3. Install ColabFold and dependencies
-# ===============================================================
+# Install ColabFold first - it will install its own JAX version
 RUN pip install --no-cache-dir \
     "colabfold[alphafold]==1.5.5" \
-    dm-haiku==0.0.12 \
     biopython \
-    scipy \
     pandas \
     matplotlib \
     py3Dmol \
     tqdm \
-    appdirs \
-    absl-py
+    appdirs
 
 # Install OpenMM for structure relaxation (optional but recommended)
-RUN pip install --no-cache-dir openmm pdbfixer
+# pdbfixer must be installed from GitHub since it's not on PyPI
+RUN pip install --no-cache-dir openmm && \
+    pip install --no-cache-dir git+https://github.com/openmm/pdbfixer.git
 
 # ===============================================================
-# 3. Set environment variables for JAX/CUDA
+# 3. Reinstall JAX with CUDA support AFTER ColabFold
 # ===============================================================
+# ColabFold installs CPU-only JAX, we need to override with CUDA version
+# Use latest JAX with cuda12 plugin which supports cuDNN 9
+RUN pip uninstall -y jax jaxlib && \
+    pip install --no-cache-dir "jax[cuda12]"
+
+# Verify JAX CUDA installation
+RUN python3 -c "import jax; print('JAX version:', jax.__version__); print('jaxlib version:', __import__('jaxlib').__version__)"
+
+# ===============================================================
+# 4. Set environment variables for JAX/CUDA
+# ===============================================================
+# NVIDIA pip packages install their libraries in dist-packages/nvidia/*/lib
+# JAX needs these paths to find CUDA libraries
+ENV NVIDIA_LIBS=/usr/local/lib/python3.10/dist-packages/nvidia
+ENV LD_LIBRARY_PATH="${NVIDIA_LIBS}/cusparse/lib:${NVIDIA_LIBS}/cublas/lib:${NVIDIA_LIBS}/cuda_runtime/lib:${NVIDIA_LIBS}/cudnn/lib:${NVIDIA_LIBS}/cufft/lib:${NVIDIA_LIBS}/cusolver/lib:${NVIDIA_LIBS}/nccl/lib:${NVIDIA_LIBS}/nvjitlink/lib:/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+
 ENV XLA_PYTHON_CLIENT_MEM_FRACTION=0.8
 ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
 ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda"
