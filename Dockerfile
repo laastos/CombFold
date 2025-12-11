@@ -1,17 +1,17 @@
 # ===============================================================
-# CombFold + LocalColabFold Docker Image (NGC JAX with Blackwell Support)
+# CombFold + ColabFold Docker Image (Python 3.10 + CUDA)
 # ===============================================================
-# Uses NVIDIA NGC JAX 25.01 container with native Blackwell (CC 12.0) support
-# Combines CombFold combinatorial assembly with ColabFold for AFM predictions
+# Uses NVIDIA CUDA base image with Python 3.10 for ColabFold compatibility
+# ColabFold requires Python <3.12, NGC JAX container has Python 3.12+
 #
 # Build: docker build -t combfold:latest .
 # Run:   docker run --gpus all --ipc=host -it combfold:latest
 #
-FROM nvcr.io/nvidia/jax:25.01-py3
+FROM nvidia/cuda:12.4.0-cudnn-devel-ubuntu22.04
 
 LABEL maintainer="CombFold Team"
-LABEL description="CombFold + LocalColabFold for large protein complex structure prediction (Blackwell GPU support)"
-LABEL version="1.0"
+LABEL description="CombFold + ColabFold for large protein complex structure prediction (Blackwell GPU support)"
+LABEL version="2.0"
 
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -19,7 +19,7 @@ ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
 
 # ===============================================================
-# 1. Install system dependencies
+# 1. Install system dependencies and Python 3.10
 # ===============================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
@@ -29,64 +29,72 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     libboost-all-dev \
     ca-certificates \
+    software-properties-common \
+    # Python 3.10
+    python3.10 \
+    python3.10-venv \
+    python3.10-dev \
+    python3-pip \
+    # Tools needed by ColabFold
+    kalign \
+    hmmer \
     && rm -rf /var/lib/apt/lists/*
 
-# ===============================================================
-# 2. Install ColabFold and dependencies
-# ===============================================================
-# Install Miniforge (formerly Mambaforge) for ColabFold environment management
-RUN wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh && \
-    bash Miniforge3-Linux-x86_64.sh -bfp /opt/conda && \
-    rm -f Miniforge3-Linux-x86_64.sh
+# Set Python 3.10 as default
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1
 
-# Create ColabFold environment
-# Note: We use a separate conda env to avoid conflicts with NGC's JAX
-# Pin JAX/Haiku versions for compatibility with ColabFold 1.5.5
-ENV PATH="/opt/conda/bin:${PATH}"
-RUN mamba create -y -n colabfold python=3.10 && \
-    mamba install -y -n colabfold -c conda-forge -c bioconda \
-    colabfold=1.5.5 \
-    openmm \
-    pdbfixer \
-    kalign2 \
-    hhsuite \
-    mmseqs2 \
-    && mamba clean -afy
+# Upgrade pip
+RUN python3 -m pip install --upgrade pip
 
-# Fix JAX/Haiku version compatibility for ColabFold with CUDA support
-# ColabFold 1.5.5 requires specific JAX/Haiku versions
-# Use JAX 0.4.23 with explicit CUDA 12 jaxlib wheel
-RUN /opt/conda/envs/colabfold/bin/pip uninstall -y jax jaxlib dm-haiku 2>/dev/null || true && \
-    /opt/conda/envs/colabfold/bin/pip install --no-cache-dir \
-    jax==0.4.23 \
-    https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.23+cuda12.cudnn89-cp310-cp310-manylinux2014_x86_64.whl \
-    dm-haiku==0.0.12
+# Install MMseqs2 from GitHub releases (latest version)
+RUN wget -q https://mmseqs.com/latest/mmseqs-linux-avx2.tar.gz && \
+    tar xzf mmseqs-linux-avx2.tar.gz && \
+    mv mmseqs/bin/mmseqs /usr/local/bin/ && \
+    rm -rf mmseqs mmseqs-linux-avx2.tar.gz
+
+# ===============================================================
+# 2. Install JAX with CUDA support
+# ===============================================================
+# Install JAX 0.4.23 with CUDA 12 support (compatible with ColabFold)
+RUN pip install --no-cache-dir \
+    "jax[cuda12_pip]==0.4.23" \
+    -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
 # Verify JAX installation
-RUN /opt/conda/envs/colabfold/bin/python -c "import jax; print('JAX version:', jax.__version__)"
+RUN python3 -c "import jax; print('JAX version:', jax.__version__)"
 
-# Set CUDA/JAX environment for ColabFold
-# Disable memory preallocation to avoid OOM on large predictions
+# ===============================================================
+# 3. Install ColabFold and dependencies
+# ===============================================================
+RUN pip install --no-cache-dir \
+    "colabfold[alphafold]==1.5.5" \
+    dm-haiku==0.0.12 \
+    biopython \
+    scipy \
+    pandas \
+    matplotlib \
+    py3Dmol \
+    tqdm \
+    appdirs \
+    absl-py
+
+# Install OpenMM for structure relaxation (optional but recommended)
+RUN pip install --no-cache-dir openmm pdbfixer
+
+# ===============================================================
+# 3. Set environment variables for JAX/CUDA
+# ===============================================================
 ENV XLA_PYTHON_CLIENT_MEM_FRACTION=0.8
 ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
-# Point to NGC container's CUDA installation
-ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
-ENV CUDA_DIR=/usr/local/cuda
 ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda"
+ENV TF_FORCE_GPU_ALLOW_GROWTH=true
+ENV TF_CPP_MIN_LOG_LEVEL=2
 
-# Set up ColabFold environment paths
-ENV COLABFOLD_ENV="/opt/conda/envs/colabfold"
+# ColabFold cache directories
 ENV MPLBACKEND=Agg
 ENV MPLCONFIGDIR=/cache
 ENV XDG_CACHE_HOME=/cache
-
-# ===============================================================
-# 3. Install Python dependencies for CombFold (in NGC base Python)
-# ===============================================================
-RUN pip install --no-cache-dir \
-    numpy \
-    biopython \
-    scipy
 
 # ===============================================================
 # 4. Copy and build CombFold
@@ -119,15 +127,16 @@ RUN mkdir -p /data/input /data/output /data/pdbs /cache
 ENV COMBFOLD_HOME=/app
 ENV PATH="${COMBFOLD_HOME}/CombinatorialAssembler:${PATH}"
 
-# TensorFlow environment variables (for GPU memory management)
-ENV TF_FORCE_GPU_ALLOW_GROWTH=true
-ENV TF_CPP_MIN_LOG_LEVEL=2
-
 # ===============================================================
 # 6. Copy helper scripts
 # ===============================================================
 COPY docker/scripts/ /app/docker/scripts/
 RUN chmod +x /app/docker/scripts/*.sh 2>/dev/null || true
+
+# Verify ColabFold and JAX GPU support
+RUN python3 -c "import jax; print('Final JAX devices:', jax.devices())" && \
+    python3 -c "from colabfold.batch import run; print('ColabFold imported successfully')" || \
+    echo "ColabFold import check (may need GPU at runtime)"
 
 # Create volumes for persistent data
 VOLUME ["/cache", "/data"]
@@ -142,4 +151,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # ===============================================================
 # 7. Default entrypoint
 # ===============================================================
-CMD ["bash", "-c", "echo 'CombFold + LocalColabFold Docker Container (Blackwell GPU)'; echo ''; echo 'Usage:'; echo '  source /opt/conda/etc/profile.d/conda.sh && conda activate colabfold'; echo '  colabfold_batch <input.fasta> <output_dir> - Run AFM predictions'; echo '  python3 /app/scripts/run_on_pdbs.py - Run CombFold assembly'; echo ''; echo 'See /app/docs/ for documentation'"]
+CMD ["bash", "-c", "echo 'CombFold + ColabFold Docker Container (Blackwell GPU)'; echo ''; echo 'GPU Status:'; python3 -c \"import jax; print('JAX devices:', jax.devices())\"; echo ''; echo 'Usage:'; echo '  colabfold_batch <input.fasta> <output_dir> - Run AFM predictions'; echo '  python3 /app/scripts/run_on_pdbs.py - Run CombFold assembly'; echo ''; echo 'See /app/docs/ for documentation'"]

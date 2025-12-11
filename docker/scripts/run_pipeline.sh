@@ -41,9 +41,9 @@ mkdir -p "$OUTPUT_DIR/fasta_groups"
 mkdir -p "$OUTPUT_DIR/afm_predictions"
 mkdir -p "$OUTPUT_DIR/assembly"
 
-# Activate colabfold environment
-source /opt/conda/etc/profile.d/conda.sh
-conda activate colabfold
+# No conda activation needed - using system Python with pip-installed ColabFold
+echo "JAX devices check:"
+python3 -c "import jax; print('  Devices:', jax.devices())"
 
 # Stage 2: Generate pair FASTAs
 echo ""
