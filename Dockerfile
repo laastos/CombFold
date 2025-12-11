@@ -54,9 +54,25 @@ RUN mamba create -y -n colabfold python=3.10 && \
     && mamba clean -afy
 
 # Fix JAX/Haiku version compatibility for ColabFold with CUDA support
-RUN /opt/conda/envs/colabfold/bin/pip install --no-cache-dir \
-    "jax[cuda12]==0.4.23" \
+# ColabFold 1.5.5 requires specific JAX/Haiku versions
+# Use JAX 0.4.23 with explicit CUDA 12 jaxlib wheel
+RUN /opt/conda/envs/colabfold/bin/pip uninstall -y jax jaxlib dm-haiku 2>/dev/null || true && \
+    /opt/conda/envs/colabfold/bin/pip install --no-cache-dir \
+    jax==0.4.23 \
+    https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.23+cuda12.cudnn89-cp310-cp310-manylinux2014_x86_64.whl \
     dm-haiku==0.0.12
+
+# Verify JAX installation
+RUN /opt/conda/envs/colabfold/bin/python -c "import jax; print('JAX version:', jax.__version__)"
+
+# Set CUDA/JAX environment for ColabFold
+# Disable memory preallocation to avoid OOM on large predictions
+ENV XLA_PYTHON_CLIENT_MEM_FRACTION=0.8
+ENV XLA_PYTHON_CLIENT_PREALLOCATE=false
+# Point to NGC container's CUDA installation
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+ENV CUDA_DIR=/usr/local/cuda
+ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda"
 
 # Set up ColabFold environment paths
 ENV COLABFOLD_ENV="/opt/conda/envs/colabfold"
@@ -103,8 +119,7 @@ RUN mkdir -p /data/input /data/output /data/pdbs /cache
 ENV COMBFOLD_HOME=/app
 ENV PATH="${COMBFOLD_HOME}/CombinatorialAssembler:${PATH}"
 
-# NGC JAX environment variables for Blackwell GPU support
-ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/local/cuda"
+# TensorFlow environment variables (for GPU memory management)
 ENV TF_FORCE_GPU_ALLOW_GROWTH=true
 ENV TF_CPP_MIN_LOG_LEVEL=2
 
