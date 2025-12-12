@@ -67,9 +67,7 @@ for fasta in "$OUTPUT_DIR/fasta_pairs"/*.fasta; do
         basename=$(basename "$fasta" .fasta)
         echo "Predicting: $basename"
         colabfold_batch "$fasta" "$OUTPUT_DIR/afm_predictions" \
-            --num-models "$NUM_MODELS" \
-            --amber \
-            --use-gpu-relax
+            --num-models "$NUM_MODELS"
     fi
 done
 
@@ -94,9 +92,7 @@ if [ "$GROUP_COUNT" -gt 0 ]; then
             basename=$(basename "$fasta" .fasta)
             echo "Predicting: $basename"
             colabfold_batch "$fasta" "$OUTPUT_DIR/afm_predictions" \
-                --num-models "$NUM_MODELS" \
-                --amber \
-                --use-gpu-relax
+                --num-models "$NUM_MODELS"
         fi
     done
 fi
