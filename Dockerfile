@@ -75,12 +75,29 @@ RUN pip install --no-cache-dir openmm && \
 # 3. Reinstall JAX with CUDA support AFTER ColabFold
 # ===============================================================
 # ColabFold installs CPU-only JAX, we need to override with CUDA version
-# Use latest JAX with cuda12 plugin which supports cuDNN 9
+# Use JAX 0.6.x with cuda12 plugin which supports Blackwell GPUs (sm_120)
+# Also upgrade dm-haiku for JAX 0.6.x compatibility
 RUN pip uninstall -y jax jaxlib && \
-    pip install --no-cache-dir "jax[cuda12]"
+    pip install --no-cache-dir "jax[cuda12]==0.6.2" "dm-haiku>=0.0.15"
 
 # Verify JAX CUDA installation
 RUN python3 -c "import jax; print('JAX version:', jax.__version__); print('jaxlib version:', __import__('jaxlib').__version__)"
+
+# ===============================================================
+# 3b. Patch AlphaFold for JAX 0.6.x compatibility
+# ===============================================================
+# JAX 0.6.0 removed jax.tree_map (use jax.tree.map instead)
+# Patch all AlphaFold files that use the deprecated API
+RUN find /usr/local/lib/python3.10/dist-packages/alphafold -name "*.py" -type f \
+    -exec grep -l "jax\.tree_map" {} \; | \
+    xargs -r sed -i 's/jax\.tree_map/jax.tree.map/g' && \
+    echo "Patched AlphaFold for JAX 0.6.x compatibility"
+
+# Clear Python cache to ensure patched files are used
+RUN find /usr/local/lib/python3.10/dist-packages/alphafold -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+
+# Verify AlphaFold imports correctly after patching
+RUN python3 -c "from alphafold.model import model; print('AlphaFold imports OK')"
 
 # ===============================================================
 # 4. Set environment variables for JAX/CUDA
