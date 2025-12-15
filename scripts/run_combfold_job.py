@@ -62,6 +62,10 @@ def parse_args():
         "--num_models", type=int, default=5,
         help="Number of AFM models to predict (default: 5)"
     )
+    parser.add_argument(
+        "--msa_mode", type=str, default="mmseqs2_uniref_env",
+        help="MSA generation mode: mmseqs2_uniref_env (default), single_sequence (offline), mmseqs2_uniref (local db)"
+    )
     return parser.parse_args()
 
 
@@ -125,7 +129,8 @@ def run_prepare_fastas(subunits_json: str, fastas_folder: str, max_af_size: int)
     return result.returncode == 0
 
 
-def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 5) -> bool:
+def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 5,
+                        msa_mode: str = "mmseqs2_uniref_env") -> bool:
     """
     Run ColabFold predictions on all FASTA files.
 
@@ -133,6 +138,7 @@ def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 
         fastas_folder: Folder containing FASTA files
         pdbs_folder: Output folder for PDB predictions
         num_models: Number of models per prediction
+        msa_mode: MSA generation mode
 
     Returns:
         True if successful
@@ -143,7 +149,8 @@ def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 
         sys.executable, "-u", run_afm_script,
         fastas_folder,
         pdbs_folder,
-        "--num-models", str(num_models)
+        "--num-models", str(num_models),
+        "--msa-mode", msa_mode
     ]
 
     print(f"   Running: {' '.join(cmd)}", flush=True)
@@ -181,7 +188,8 @@ def run_assembly(subunits_json: str, pdbs_folder: str, output_folder: str) -> bo
 
 def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
                  gpu_id: int, skip_afm: bool = False,
-                 max_af_size: int = 1800, num_models: int = 5) -> bool:
+                 max_af_size: int = 1800, num_models: int = 5,
+                 msa_mode: str = "mmseqs2_uniref_env") -> bool:
     """
     Run the complete CombFold pipeline for a single job.
 
@@ -193,6 +201,7 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
         skip_afm: Skip AFM predictions
         max_af_size: Max sequence length for AFM
         num_models: Number of AFM models
+        msa_mode: MSA generation mode
 
     Returns:
         True if successful
@@ -256,7 +265,7 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
         if existing_pdbs > 0:
             print(f"   Found {existing_pdbs} existing PDB(s), checking for completeness...", flush=True)
 
-        if not run_afm_predictions(fastas_folder, pdbs_folder, num_models):
+        if not run_afm_predictions(fastas_folder, pdbs_folder, num_models, msa_mode):
             print(f"   ERROR: Failed to run AFM predictions", flush=True)
             return False
 
@@ -306,7 +315,11 @@ def main():
     print(f"# CombFold Job: {args.job_id}", flush=True)
     print(f"# GPU: {args.gpu}", flush=True)
     print(f"# Sequences: {len(args.sequences)}", flush=True)
+    print(f"# MSA Mode: {args.msa_mode}", flush=True)
     print(f"{'#'*60}", flush=True)
+
+    if args.msa_mode == "single_sequence":
+        print(f"\nWARNING: Using single_sequence mode (no MSA) - predictions may be less accurate", flush=True)
 
     success = run_pipeline(
         job_id=args.job_id,
@@ -315,7 +328,8 @@ def main():
         gpu_id=args.gpu,
         skip_afm=args.skip_afm,
         max_af_size=args.max_af_size,
-        num_models=args.num_models
+        num_models=args.num_models,
+        msa_mode=args.msa_mode
     )
 
     sys.exit(0 if success else 1)

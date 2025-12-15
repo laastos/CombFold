@@ -72,7 +72,8 @@ def get_prediction_status(fasta_name: str, output_folder: str, num_models: int) 
 
 
 def run_colabfold(fasta_path: str, output_folder: str, num_models: int = 5,
-                  use_gpu: bool = True, amber_relax: bool = False) -> Tuple[bool, str]:
+                  use_gpu: bool = True, amber_relax: bool = False,
+                  msa_mode: str = "mmseqs2_uniref_env") -> Tuple[bool, str]:
     """
     Run ColabFold batch on a single FASTA file.
 
@@ -82,6 +83,10 @@ def run_colabfold(fasta_path: str, output_folder: str, num_models: int = 5,
         num_models: Number of models to predict
         use_gpu: Use GPU acceleration
         amber_relax: Apply AMBER relaxation
+        msa_mode: MSA generation mode:
+            - 'mmseqs2_uniref_env': Use ColabFold server (requires internet)
+            - 'single_sequence': No MSA, use input sequence only (offline, less accurate)
+            - 'mmseqs2_uniref': Use local MMseqs2 with UniRef30 database
 
     Returns:
         Tuple of (success, message)
@@ -102,6 +107,7 @@ def run_colabfold(fasta_path: str, output_folder: str, num_models: int = 5,
         output_folder,
         "--num-models", str(num_models),
         "--model-type", "alphafold2_multimer_v3",
+        "--msa-mode", msa_mode,
     ]
     if not use_gpu:
         cmd.append("--cpu")
@@ -168,7 +174,8 @@ def copy_pdbs_to_output(colabfold_output: str, pdbs_folder: str, fasta_name: str
 
 
 def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5,
-                       use_gpu: bool = True, amber_relax: bool = False) -> Tuple[int, int, int]:
+                       use_gpu: bool = True, amber_relax: bool = False,
+                       msa_mode: str = "mmseqs2_uniref_env") -> Tuple[int, int, int]:
     """
     Process all FASTA files in a folder.
 
@@ -178,6 +185,7 @@ def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5
         num_models: Number of models per prediction
         use_gpu: Use GPU acceleration
         amber_relax: Apply AMBER relaxation
+        msa_mode: MSA generation mode
 
     Returns:
         Tuple of (completed, failed, skipped)
@@ -216,7 +224,8 @@ def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5
             temp_output,
             num_models,
             use_gpu,
-            amber_relax
+            amber_relax,
+            msa_mode
         )
 
         if success:
@@ -263,6 +272,12 @@ def parse_args():
         "--amber", action="store_true",
         help="Apply AMBER relaxation to predictions"
     )
+    parser.add_argument(
+        "--msa-mode", type=str, default="mmseqs2_uniref_env",
+        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref"],
+        help="MSA generation mode: mmseqs2_uniref_env (default, requires internet), "
+             "single_sequence (offline, no MSA), mmseqs2_uniref (local database)"
+    )
     return parser.parse_args()
 
 
@@ -272,11 +287,16 @@ def main():
     print(f"\n{'='*60}", flush=True)
     print(f"ColabFold Batch Predictions", flush=True)
     print(f"{'='*60}", flush=True)
-    print(f"   Input:  {args.fastas_folder}", flush=True)
-    print(f"   Output: {args.pdbs_folder}", flush=True)
-    print(f"   Models: {args.num_models}", flush=True)
-    print(f"   Docker: {is_inside_docker()}", flush=True)
-    print(f"   GPU:    {not args.cpu}", flush=True)
+    print(f"   Input:    {args.fastas_folder}", flush=True)
+    print(f"   Output:   {args.pdbs_folder}", flush=True)
+    print(f"   Models:   {args.num_models}", flush=True)
+    print(f"   MSA Mode: {args.msa_mode}", flush=True)
+    print(f"   Docker:   {is_inside_docker()}", flush=True)
+    print(f"   GPU:      {not args.cpu}", flush=True)
+
+    if args.msa_mode == "single_sequence":
+        print(f"\n   WARNING: Using single_sequence mode (no MSA).", flush=True)
+        print(f"            Predictions may be less accurate.", flush=True)
 
     if not os.path.exists(args.fastas_folder):
         print(f"\n   ERROR: FASTA folder not found: {args.fastas_folder}", flush=True)
@@ -289,7 +309,8 @@ def main():
         args.pdbs_folder,
         args.num_models,
         use_gpu=not args.cpu,
-        amber_relax=args.amber
+        amber_relax=args.amber,
+        msa_mode=args.msa_mode
     )
 
     print(f"\n{'='*60}", flush=True)

@@ -33,7 +33,7 @@ import pandas as pd
 # Configuration constants
 EXCEL_FILE = "batch_jobs.xlsx"
 SLEEP_INTERVAL = int(os.environ.get("SLEEP_INTERVAL", "10"))  # Seconds between GPU checks
-MESSAGE_INTERVAL = int(os.environ.get("MESSAGE_INTERVAL", "60"))  # Seconds between status messages
+MESSAGE_INTERVAL = int(os.environ.get("MESSAGE_INTERVAL", "300"))  # Seconds between status messages
 GPU_LOCK_DIR = "/tmp/combfold_gpu_locks"  # Directory for GPU lock files
 
 # Script paths
@@ -109,6 +109,12 @@ def parse_args():
     parser.add_argument(
         "--num-models", type=int, default=5,
         help="Number of AFM models per prediction (default: 5)"
+    )
+    parser.add_argument(
+        "--msa-mode", type=str, default="mmseqs2_uniref_env",
+        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref"],
+        help="MSA generation mode: mmseqs2_uniref_env (default, requires internet), "
+             "single_sequence (offline, no MSA), mmseqs2_uniref (local database)"
     )
     return parser.parse_args()
 
@@ -424,6 +430,9 @@ def main():
     print(f"   Poll interval:     {SLEEP_INTERVAL}s")
     print(f"   Chain columns:     {chain_columns}")
     print(f"   Skip AFM:          {args.skip_afm}")
+    print(f"   MSA Mode:          {args.msa_mode}")
+    if args.msa_mode == "single_sequence":
+        print(f"   WARNING:           No MSA - predictions may be less accurate")
     if force_rerun:
         print(f"   Mode:              FORCE (re-running all jobs)")
     print("=" * 60)
@@ -458,6 +467,7 @@ def main():
                     "--output_dir", args.output_dir,
                     "--max_af_size", str(args.max_af_size),
                     "--num_models", str(args.num_models),
+                    "--msa_mode", args.msa_mode,
                     "--sequences", *seqs
                 ]
                 if args.skip_afm:
