@@ -61,6 +61,7 @@ RUN pip install --no-cache-dir \
     "colabfold[alphafold]==1.5.5" \
     biopython \
     pandas \
+    openpyxl \
     matplotlib \
     py3Dmol \
     tqdm \
