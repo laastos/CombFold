@@ -129,13 +129,40 @@ def run_prepare_fastas(subunits_json: str, fastas_folder: str, max_af_size: int)
     return result.returncode == 0
 
 
-def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 5,
-                        msa_mode: str = "mmseqs2_uniref_env") -> bool:
+def run_msa_search(fastas_folder: str, msas_folder: str, db_path: str = "/cache/colabfold_db") -> bool:
     """
-    Run ColabFold predictions on all FASTA files.
+    Run local MSA search using colabfold_search.
 
     Args:
         fastas_folder: Folder containing FASTA files
+        msas_folder: Output folder for A3M files
+        db_path: Path to MMseqs2 database
+
+    Returns:
+        True if successful
+    """
+    run_msa_script = os.path.join(SCRIPT_DIR, "run_msa_search.py")
+
+    cmd = [
+        sys.executable, "-u", run_msa_script,
+        fastas_folder,
+        msas_folder,
+        "--db", db_path
+    ]
+
+    print(f"   Running: {' '.join(cmd[:4])} ...", flush=True)
+    result = subprocess.run(cmd, capture_output=False)
+
+    return result.returncode == 0
+
+
+def run_afm_predictions(input_folder: str, pdbs_folder: str, num_models: int = 5,
+                        msa_mode: str = "mmseqs2_uniref_env") -> bool:
+    """
+    Run ColabFold predictions on FASTA or A3M files.
+
+    Args:
+        input_folder: Folder containing FASTA or A3M files
         pdbs_folder: Output folder for PDB predictions
         num_models: Number of models per prediction
         msa_mode: MSA generation mode
@@ -147,7 +174,7 @@ def run_afm_predictions(fastas_folder: str, pdbs_folder: str, num_models: int = 
 
     cmd = [
         sys.executable, "-u", run_afm_script,
-        fastas_folder,
+        input_folder,
         pdbs_folder,
         "--num-models", str(num_models),
         "--msa-mode", msa_mode
@@ -213,6 +240,7 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
     job_dir = os.path.join(output_dir, job_id)
     subunits_json_path = os.path.join(job_dir, "subunits.json")
     fastas_folder = os.path.join(job_dir, "fastas")
+    msas_folder = os.path.join(job_dir, "msas")  # For local MSA mode
     pdbs_folder = os.path.join(job_dir, "pdbs")
     assembly_output = os.path.join(job_dir, "output")
 
@@ -223,6 +251,7 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
     print(f"{'='*60}", flush=True)
     print(f"   GPU: {gpu_id}", flush=True)
     print(f"   Sequences: {len(sequences)}", flush=True)
+    print(f"   MSA Mode: {msa_mode}", flush=True)
     print(f"   Output: {job_dir}", flush=True)
 
     start_time = time.time()
@@ -255,9 +284,26 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
         fasta_count = len([f for f in os.listdir(fastas_folder) if f.endswith('.fasta')])
         print(f"   Using existing {fasta_count} FASTA file(s)", flush=True)
 
-    # Stage 3: AFM Predictions
+    # Stage 3a: MSA Search (only for local mode)
+    if not skip_afm and msa_mode == "local":
+        print(f"\n[Stage 3a] Running local MSA search...", flush=True)
+        os.makedirs(msas_folder, exist_ok=True)
+
+        # Check for existing A3M files
+        existing_a3ms = len([f for f in os.listdir(msas_folder) if f.endswith('.a3m')]) if os.path.exists(msas_folder) else 0
+        if existing_a3ms > 0:
+            print(f"   Found {existing_a3ms} existing A3M(s), checking for completeness...", flush=True)
+
+        if not run_msa_search(fastas_folder, msas_folder):
+            print(f"   ERROR: Failed to run MSA search", flush=True)
+            return False
+
+        a3m_count = len([f for f in os.listdir(msas_folder) if f.endswith('.a3m')])
+        print(f"   Total: {a3m_count} A3M file(s)", flush=True)
+
+    # Stage 3b: AFM Predictions
     if not skip_afm:
-        print(f"\n[Stage 3] Running AlphaFold-Multimer predictions...", flush=True)
+        print(f"\n[Stage 3b] Running AlphaFold-Multimer predictions...", flush=True)
         os.makedirs(pdbs_folder, exist_ok=True)
 
         # Check if predictions already exist
@@ -265,7 +311,14 @@ def run_pipeline(job_id: str, sequences: List[str], output_dir: str,
         if existing_pdbs > 0:
             print(f"   Found {existing_pdbs} existing PDB(s), checking for completeness...", flush=True)
 
-        if not run_afm_predictions(fastas_folder, pdbs_folder, num_models, msa_mode):
+        # Determine input folder based on MSA mode
+        if msa_mode == "local":
+            input_folder = msas_folder
+            print(f"   Using pre-computed MSAs from: {msas_folder}", flush=True)
+        else:
+            input_folder = fastas_folder
+
+        if not run_afm_predictions(input_folder, pdbs_folder, num_models, msa_mode):
             print(f"   ERROR: Failed to run AFM predictions", flush=True)
             return False
 

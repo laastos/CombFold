@@ -145,6 +145,15 @@ python3 scripts/batch_runner.py [options]
 | `--num-models` | `5` | Number of AFM models per prediction |
 | `--force` | `False` | Re-run all jobs even if completed |
 | `--skip-afm` | `False` | Skip AFM predictions (use existing PDBs) |
+| `--msa-mode` | `mmseqs2_uniref_env` | MSA generation mode |
+
+**MSA Mode Options for Batch Processing:**
+
+| Mode | Use Case |
+|------|----------|
+| `mmseqs2_uniref_env` | Default, requires internet access to ColabFold server |
+| `single_sequence` | Offline mode, no MSA (less accurate predictions) |
+| `local` | Fully offline with local MMseqs2 databases (best for HPC) |
 
 ### Environment Variables for Batch Processing
 
@@ -198,6 +207,19 @@ python3 scripts/excel_to_subunits.py <excel_file> [options]
 | `--split` | `False` | Create separate files per complex |
 | `--max-af-size` | None | Split large sequences into domains |
 
+### run_msa_search.py
+
+```bash
+python3 scripts/run_msa_search.py <fastas_folder> <output_folder> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--db` | `/cache/colabfold_db` | Path to MMseqs2 database |
+| `--no-env` | `False` | Don't use environmental sequences (UniRef30 only) |
+| `--templates` | `False` | Search for templates (requires PDB70) |
+| `--threads` | `4` | Number of CPU threads |
+
 ### run_afm_predictions.py
 
 ```bash
@@ -209,6 +231,16 @@ python3 scripts/run_afm_predictions.py <fastas_folder> <pdbs_folder> [options]
 | `--num-models` | `5` | Number of models per prediction |
 | `--cpu` | `False` | Use CPU only (no GPU) |
 | `--amber` | `False` | Apply AMBER relaxation |
+| `--msa-mode` | `mmseqs2_uniref_env` | MSA generation mode (see below) |
+
+**MSA Modes:**
+
+| Mode | Description | Network Required |
+|------|-------------|------------------|
+| `mmseqs2_uniref_env` | Use ColabFold server for MSA (default) | Yes |
+| `single_sequence` | No MSA, use input sequence only (less accurate) | No |
+| `mmseqs2_uniref` | Use local MMseqs2 with UniRef30 database | No |
+| `local` | Use pre-computed A3M files from run_msa_search.py | No |
 
 ---
 
@@ -451,6 +483,7 @@ CombFold respects the following environment variables:
 |----------|---------|---------|
 | `COMBFOLD_HOME` | Installation directory | Auto-detected |
 | `BOOST_ROOT` | Boost installation path | System default |
+| `COLABFOLD_DB` | Path to MMseqs2 database for local MSA | `/cache/colabfold_db` |
 
 ---
 

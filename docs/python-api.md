@@ -10,6 +10,7 @@ This document provides detailed documentation for all Python scripts and modules
 - [Batch Processing Scripts](#batch-processing-scripts)
   - [batch_runner.py](#batch_runnerpy)
   - [run_combfold_job.py](#run_combfold_jobpy)
+  - [run_msa_search.py](#run_msa_searchpy)
   - [run_afm_predictions.py](#run_afm_predictionspy)
   - [excel_to_subunits.py](#excel_to_subunitspy)
   - [split_large_subunits.py](#split_large_subunitspy)
@@ -365,25 +366,107 @@ Run the complete CombFold pipeline for a single job.
 
 ---
 
-### run_afm_predictions.py
+### run_msa_search.py
 
-**Location:** `scripts/run_afm_predictions.py`
+**Location:** `scripts/run_msa_search.py`
 
-Runs ColabFold predictions on all FASTA files in a directory.
+Generates Multiple Sequence Alignments (MSAs) from local MMseqs2 databases using colabfold_search.
+
+This is part of the clean pipeline architecture for offline operation:
+1. `run_msa_search.py` → Generate MSAs (this script)
+2. `run_afm_predictions.py` → Structure prediction
+3. `run_on_pdbs.py` → Combinatorial assembly
 
 #### Command Line Usage
 
 ```bash
-python3 scripts/run_afm_predictions.py fastas/ pdbs/ --num-models 5
+# Basic usage
+python3 run_msa_search.py fastas/ msas/ --db /cache/colabfold_db
+
+# UniRef30 only (faster)
+python3 run_msa_search.py fastas/ msas/ --db /cache/colabfold_db --no-env
+
+# With template search
+python3 run_msa_search.py fastas/ msas/ --db /cache/colabfold_db --templates
 ```
 
 | Argument | Required | Description |
 |----------|----------|-------------|
 | `fastas_folder` | Yes | Folder containing FASTA files |
+| `output_folder` | Yes | Output folder for A3M files |
+| `--db` | No | Path to MMseqs2 database (default: /cache/colabfold_db) |
+| `--no-env` | No | Don't use environmental sequences |
+| `--templates` | No | Search for templates (requires PDB70) |
+| `--threads` | No | Number of CPU threads (default: 4) |
+
+#### Key Functions
+
+##### `run_colabfold_search()`
+
+```python
+def run_colabfold_search(
+    fasta_path: str,
+    output_folder: str,
+    db_path: str,
+    use_env: bool = True,
+    use_templates: bool = False,
+    threads: int = 4
+) -> Tuple[bool, str]
+```
+
+Run colabfold_search on a single FASTA file.
+
+**Returns:** Tuple of (success, message).
+
+##### `check_database()`
+
+```python
+def check_database(db_path: str) -> Tuple[bool, str]
+```
+
+Verify that the MMseqs2 database exists and is valid.
+
+**Returns:** Tuple of (is_valid, message).
+
+##### `get_msa_status()`
+
+```python
+def get_msa_status(fasta_name: str, output_folder: str) -> str
+```
+
+Check MSA generation status for a FASTA file.
+
+**Returns:** `completed` or `not_started`.
+
+---
+
+### run_afm_predictions.py
+
+**Location:** `scripts/run_afm_predictions.py`
+
+Runs ColabFold predictions on FASTA or A3M files in a directory.
+
+#### Command Line Usage
+
+```bash
+# Online mode (uses ColabFold server)
+python3 run_afm_predictions.py fastas/ pdbs/ --num-models 5
+
+# Local mode (uses pre-computed A3M files)
+python3 run_afm_predictions.py msas/ pdbs/ --msa-mode local
+
+# Offline mode (no MSA)
+python3 run_afm_predictions.py fastas/ pdbs/ --msa-mode single_sequence
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `input_folder` | Yes | Folder containing FASTA or A3M files |
 | `pdbs_folder` | Yes | Output folder for PDB predictions |
 | `--num-models` | No | Number of models (default: 5) |
 | `--cpu` | No | Use CPU only |
 | `--amber` | No | Apply AMBER relaxation |
+| `--msa-mode` | No | MSA mode: mmseqs2_uniref_env, single_sequence, local |
 
 #### Key Functions
 

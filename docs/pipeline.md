@@ -204,7 +204,7 @@ Sequences are separated by `:` (ColabFold format).
 
 Upload FASTA files and run using the ColabFold notebook.
 
-#### Option B: LocalColabFold
+#### Option B: LocalColabFold (Online)
 
 ```bash
 for fasta in fasta_pairs/*.fasta; do
@@ -212,7 +212,33 @@ for fasta in fasta_pairs/*.fasta; do
 done
 ```
 
-#### Option C: AlphaPullDown
+#### Option C: Local MSA + ColabFold (Offline)
+
+For fully offline operation with local databases:
+
+```bash
+# Step 1: Generate MSAs from local database
+python3 scripts/run_msa_search.py fasta_pairs/ msas/ --db /cache/colabfold_db
+
+# Step 2: Run predictions on A3M files
+python3 scripts/run_afm_predictions.py msas/ afm_results/ --msa-mode local
+```
+
+This requires downloading the MMseqs2 databases first:
+
+```bash
+./docker/scripts/download_weights.sh --db-uniref  # ~100GB, UniRef30 only
+```
+
+#### Option D: Single Sequence (Offline, No MSA)
+
+```bash
+python3 scripts/run_afm_predictions.py fasta_pairs/ afm_results/ --msa-mode single_sequence
+```
+
+Note: This mode doesn't use MSA and produces less accurate predictions.
+
+#### Option E: AlphaPullDown
 
 ```bash
 # Follow AlphaPullDown documentation
@@ -513,6 +539,7 @@ For processing multiple complexes efficiently, CombFold provides a batch process
 |--------|---------|
 | `batch_runner.py` | Multi-GPU job orchestrator |
 | `run_combfold_job.py` | Single job pipeline executor |
+| `run_msa_search.py` | Local MSA generation (offline mode) |
 | `run_afm_predictions.py` | ColabFold prediction runner |
 | `excel_to_subunits.py` | Excel to subunits.json converter |
 | `split_large_subunits.py` | Large sequence domain splitter |
@@ -529,7 +556,7 @@ Define multiple complexes in an Excel file (`batch_jobs.xlsx`):
 ### Running Batch Jobs
 
 ```bash
-# Basic batch run (auto-detects GPUs)
+# Basic batch run (auto-detects GPUs, uses ColabFold server for MSA)
 python3 scripts/batch_runner.py --excel batch_jobs.xlsx
 
 # With options
@@ -538,6 +565,12 @@ python3 scripts/batch_runner.py \
     --output-dir results/ \
     --max-af-size 1800 \
     --num-models 5
+
+# Fully offline with local MSA databases (recommended for HPC)
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --msa-mode local
+
+# Offline without MSA (faster but less accurate)
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --msa-mode single_sequence
 
 # Force re-run completed jobs
 python3 scripts/batch_runner.py --excel batch_jobs.xlsx --force
@@ -553,6 +586,7 @@ results/
 ├── Complex_001/
 │   ├── subunits.json
 │   ├── fastas/
+│   ├── msas/           # Only when using --msa-mode local
 │   ├── pdbs/
 │   └── output/
 │       └── assembled_results/

@@ -112,9 +112,10 @@ def parse_args():
     )
     parser.add_argument(
         "--msa-mode", type=str, default="mmseqs2_uniref_env",
-        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref"],
+        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref", "local"],
         help="MSA generation mode: mmseqs2_uniref_env (default, requires internet), "
-             "single_sequence (offline, no MSA), mmseqs2_uniref (local database)"
+             "single_sequence (offline, no MSA), mmseqs2_uniref (local server), "
+             "local (run colabfold_search on local DB first)"
     )
     return parser.parse_args()
 
@@ -433,6 +434,8 @@ def main():
     print(f"   MSA Mode:          {args.msa_mode}")
     if args.msa_mode == "single_sequence":
         print(f"   WARNING:           No MSA - predictions may be less accurate")
+    elif args.msa_mode == "local":
+        print(f"   INFO:              Will run colabfold_search on local database")
     if force_rerun:
         print(f"   Mode:              FORCE (re-running all jobs)")
     print("=" * 60)

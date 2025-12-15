@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """
-Run ColabFold predictions on FASTA files for CombFold batch processing.
+Run ColabFold predictions on FASTA or A3M files for CombFold batch processing.
 
-This script processes all FASTA files in an input directory and runs
+This script processes all FASTA/A3M files in an input directory and runs
 ColabFold batch predictions, placing output PDBs in the specified folder.
 
+This is part of the CombFold clean pipeline architecture:
+    1. run_msa_search.py     → Generate MSAs (optional, for local mode)
+    2. run_afm_predictions.py → Structure prediction (this script)
+    3. run_on_pdbs.py         → Combinatorial assembly
+
 Usage:
+    # Online mode (uses ColabFold server for MSA)
     python3 run_afm_predictions.py fastas/ pdbs/ --num-models 5
 
-Inside Docker:
-    The script automatically activates the ColabFold conda environment.
+    # Local mode (uses pre-computed A3M files)
+    python3 run_afm_predictions.py msas/ pdbs/ --num-models 5 --msa-mode local
 
-Outside Docker (LocalColabFold):
-    Assumes colabfold_batch is available in PATH.
+    # Offline mode (no MSA, single sequence)
+    python3 run_afm_predictions.py fastas/ pdbs/ --msa-mode single_sequence
 """
 
 import argparse
@@ -173,14 +179,39 @@ def copy_pdbs_to_output(colabfold_output: str, pdbs_folder: str, fasta_name: str
     return copied
 
 
-def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5,
+def find_input_files(input_folder: str, msa_mode: str) -> List[str]:
+    """
+    Find input files based on MSA mode.
+
+    Args:
+        input_folder: Folder containing input files
+        msa_mode: MSA generation mode
+
+    Returns:
+        List of input file paths
+    """
+    if msa_mode == "local":
+        # Local mode uses pre-computed A3M files
+        a3m_files = sorted(glob.glob(os.path.join(input_folder, "*.a3m")))
+        if a3m_files:
+            return a3m_files
+        # Also check subdirectories (colabfold_search output structure)
+        a3m_files = sorted(glob.glob(os.path.join(input_folder, "*", "*.a3m")))
+        if a3m_files:
+            return a3m_files
+
+    # Default: FASTA files
+    return sorted(glob.glob(os.path.join(input_folder, "*.fasta")))
+
+
+def process_all_fastas(input_folder: str, pdbs_folder: str, num_models: int = 5,
                        use_gpu: bool = True, amber_relax: bool = False,
                        msa_mode: str = "mmseqs2_uniref_env") -> Tuple[int, int, int]:
     """
-    Process all FASTA files in a folder.
+    Process all FASTA/A3M files in a folder.
 
     Args:
-        fastas_folder: Folder containing FASTA files
+        input_folder: Folder containing FASTA or A3M files
         pdbs_folder: Output folder for PDBs
         num_models: Number of models per prediction
         use_gpu: Use GPU acceleration
@@ -190,14 +221,16 @@ def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5
     Returns:
         Tuple of (completed, failed, skipped)
     """
-    # Find all FASTA files
-    fasta_files = sorted(glob.glob(os.path.join(fastas_folder, "*.fasta")))
+    # Find input files based on mode
+    input_files = find_input_files(input_folder, msa_mode)
 
-    if not fasta_files:
-        print(f"   No FASTA files found in {fastas_folder}", flush=True)
+    if not input_files:
+        file_type = "A3M" if msa_mode == "local" else "FASTA"
+        print(f"   No {file_type} files found in {input_folder}", flush=True)
         return 0, 0, 0
 
-    print(f"   Found {len(fasta_files)} FASTA file(s)", flush=True)
+    file_type = "A3M" if msa_mode == "local" else "FASTA"
+    print(f"   Found {len(input_files)} {file_type} file(s)", flush=True)
 
     completed = 0
     failed = 0
@@ -207,12 +240,16 @@ def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5
     temp_output = os.path.join(pdbs_folder, "_colabfold_output")
     os.makedirs(temp_output, exist_ok=True)
 
-    for i, fasta_path in enumerate(fasta_files, 1):
-        fasta_name = Path(fasta_path).stem
-        print(f"\n   [{i}/{len(fasta_files)}] Processing {fasta_name}...", flush=True)
+    # Determine effective MSA mode for colabfold_batch
+    # When using local A3M files, colabfold_batch doesn't need MSA mode flag
+    effective_msa_mode = msa_mode if msa_mode != "local" else "mmseqs2_uniref_env"
+
+    for i, input_path in enumerate(input_files, 1):
+        input_name = Path(input_path).stem
+        print(f"\n   [{i}/{len(input_files)}] Processing {input_name}...", flush=True)
 
         # Check if already processed
-        status = get_prediction_status(fasta_name, pdbs_folder, num_models)
+        status = get_prediction_status(input_name, pdbs_folder, num_models)
         if status == 'completed':
             print(f"      Skipping (already completed)", flush=True)
             skipped += 1
@@ -220,17 +257,17 @@ def process_all_fastas(fastas_folder: str, pdbs_folder: str, num_models: int = 5
 
         # Run prediction
         success, message = run_colabfold(
-            fasta_path,
+            input_path,
             temp_output,
             num_models,
             use_gpu,
             amber_relax,
-            msa_mode
+            effective_msa_mode
         )
 
         if success:
             # Copy PDBs to output folder
-            copied = copy_pdbs_to_output(temp_output, pdbs_folder, fasta_name)
+            copied = copy_pdbs_to_output(temp_output, pdbs_folder, input_name)
             print(f"      Completed: {copied} PDB(s) copied", flush=True)
             completed += 1
         else:
@@ -274,9 +311,10 @@ def parse_args():
     )
     parser.add_argument(
         "--msa-mode", type=str, default="mmseqs2_uniref_env",
-        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref"],
+        choices=["mmseqs2_uniref_env", "single_sequence", "mmseqs2_uniref", "local"],
         help="MSA generation mode: mmseqs2_uniref_env (default, requires internet), "
-             "single_sequence (offline, no MSA), mmseqs2_uniref (local database)"
+             "single_sequence (offline, no MSA), mmseqs2_uniref (local server), "
+             "local (use pre-computed A3M files from run_msa_search.py)"
     )
     return parser.parse_args()
 
@@ -284,10 +322,12 @@ def parse_args():
 def main():
     args = parse_args()
 
+    input_type = "A3M (pre-computed MSA)" if args.msa_mode == "local" else "FASTA"
+
     print(f"\n{'='*60}", flush=True)
     print(f"ColabFold Batch Predictions", flush=True)
     print(f"{'='*60}", flush=True)
-    print(f"   Input:    {args.fastas_folder}", flush=True)
+    print(f"   Input:    {args.fastas_folder} ({input_type})", flush=True)
     print(f"   Output:   {args.pdbs_folder}", flush=True)
     print(f"   Models:   {args.num_models}", flush=True)
     print(f"   MSA Mode: {args.msa_mode}", flush=True)
@@ -297,9 +337,12 @@ def main():
     if args.msa_mode == "single_sequence":
         print(f"\n   WARNING: Using single_sequence mode (no MSA).", flush=True)
         print(f"            Predictions may be less accurate.", flush=True)
+    elif args.msa_mode == "local":
+        print(f"\n   INFO: Using pre-computed A3M files (local mode).", flush=True)
 
     if not os.path.exists(args.fastas_folder):
-        print(f"\n   ERROR: FASTA folder not found: {args.fastas_folder}", flush=True)
+        folder_type = "A3M" if args.msa_mode == "local" else "FASTA"
+        print(f"\n   ERROR: {folder_type} folder not found: {args.fastas_folder}", flush=True)
         sys.exit(1)
 
     os.makedirs(args.pdbs_folder, exist_ok=True)
