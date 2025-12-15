@@ -173,6 +173,13 @@ ls -la CombinatorialAssembler.out
 output path /path/to/output is not empty, exiting
 ```
 
+**Note:** As of the latest version, CombFold automatically detects and cleans up directories containing only empty folders. You will see:
+```
+output path /path/to/output contains only empty folders, cleaning up and continuing...
+```
+
+If the directory contains actual files (not just empty folders), you'll need to manually resolve:
+
 **Solution:**
 ```bash
 # Remove existing output
@@ -453,7 +460,8 @@ Killed
 | Error | Cause | Solution |
 |-------|-------|----------|
 | "missing rep subunits" | Sequence mismatch | Verify sequences |
-| "output path is not empty" | Existing output | Remove or rename |
+| "output path is not empty" | Existing output with files | Remove or rename |
+| "contains only empty folders, cleaning up" | Empty folders from interrupted run | Auto-cleaned, continues normally |
 | "binary not found" | Not built | Run `make` |
 | "Unexpected output from AF2mer2trans" | Bad PDB format | Check PDB files |
 | "No module named 'Bio'" | Missing package | `pip install biopython` |

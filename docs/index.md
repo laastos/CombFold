@@ -11,9 +11,12 @@ The pipeline addresses a fundamental limitation in current protein structure pre
 ## Key Features
 
 - **Hierarchical Assembly**: Builds complexes incrementally from pairs to larger assemblies
+- **Batch Processing**: Multi-GPU job orchestration for processing multiple complexes
+- **Large Sequence Handling**: Automatic domain splitting for sequences exceeding AFM limits
 - **Crosslink Support**: Integrates XL-MS (cross-linking mass spectrometry) distance constraints
 - **Collision Detection**: Spatial hashing with backbone collision filtering
 - **Multi-Model Output**: Generates ranked models with confidence scores
+- **Docker Support**: Complete containerized environment with Blackwell GPU compatibility
 - **Flexible Input**: Works with ColabFold, localcolabfold, or AlphaPullDown predictions
 
 ## Documentation Contents
@@ -90,8 +93,18 @@ CombFold/
 ├── scripts/                     # Python pipeline scripts
 │   ├── run_on_pdbs.py          # Main assembly orchestrator
 │   ├── prepare_fastas.py       # FASTA generation
+│   ├── batch_runner.py         # Multi-GPU batch job orchestrator
+│   ├── run_combfold_job.py     # Single job pipeline executor
+│   ├── run_afm_predictions.py  # ColabFold prediction runner
+│   ├── excel_to_subunits.py    # Excel to subunits.json converter
+│   ├── split_large_subunits.py # Large sequence domain splitter
 │   └── libs/                   # Support libraries
+├── docker/                     # Docker support files
+│   └── scripts/                # Docker helper scripts
+├── Dockerfile                  # Container definition
+├── batch_jobs.example.xlsx     # Example batch input file
 ├── example/                    # Demo data and expected outputs
+├── docs/                       # Documentation
 ├── CombFold.ipynb              # Demo Jupyter notebook
 └── README.md                   # Original documentation
 ```

@@ -5,6 +5,7 @@ This document provides a comprehensive reference for all configurable parameters
 ## Table of Contents
 
 - [Command Line Parameters](#command-line-parameters)
+- [Batch Processing Configuration](#batch-processing-configuration)
 - [DOCK.conf Configuration](#dockconf-configuration)
 - [Crosslinks File Format](#crosslinks-file-format)
 - [Subunits.json Schema](#subunitsjson-schema)
@@ -125,6 +126,89 @@ RMSD threshold for clustering similar solutions.
 -c 3.0    # Tighter clustering
 -c 10.0   # Looser clustering, more diverse results
 ```
+
+---
+
+## Batch Processing Configuration
+
+### batch_runner.py
+
+```bash
+python3 scripts/batch_runner.py [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--excel` | `batch_jobs.xlsx` | Path to Excel file with job specifications |
+| `--output-dir` | `results` | Base output directory |
+| `--max-af-size` | `1800` | Max combined sequence length for AFM |
+| `--num-models` | `5` | Number of AFM models per prediction |
+| `--force` | `False` | Re-run all jobs even if completed |
+| `--skip-afm` | `False` | Skip AFM predictions (use existing PDBs) |
+
+### Environment Variables for Batch Processing
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GPU_COUNT` | Auto-detected | Number of GPUs to use |
+| `SLEEP_INTERVAL` | `10` | Seconds between GPU availability checks |
+| `MESSAGE_INTERVAL` | `60` | Seconds between status messages |
+| `COMBFOLD_DOCKER_IMAGE` | `combfold:latest` | Docker image for containerized runs |
+| `COMBFOLD_NO_DOCKER` | `0` | Set to `1` to run outside Docker |
+
+### Excel File Format
+
+The Excel file must contain:
+
+| Column | Required | Description |
+|--------|----------|-------------|
+| `Complex_ID` | Yes | Unique identifier for the complex |
+| `Chain_A`, `Chain_B`, ... | Yes (at least one) | Amino acid sequences |
+
+Example:
+
+| Complex_ID | Chain_A | Chain_B | Chain_C |
+|------------|---------|---------|---------|
+| Protein_001 | MKTAYIAK... | MVLSPAD... | |
+| Protein_002 | MDKLEQK... | MFDKILI... | MGDKIES... |
+
+### split_large_subunits.py
+
+```bash
+python3 scripts/split_large_subunits.py <input.json> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o`, `--output` | stdout | Output file path |
+| `--max-af-size` | `1800` | Max combined size for AFM predictions |
+| `--overlap` | `0` | Residue overlap between domains |
+| `--check` | `False` | Only show what would be split |
+| `--in-place` | `False` | Modify input file in place |
+
+### excel_to_subunits.py
+
+```bash
+python3 scripts/excel_to_subunits.py <excel_file> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `-o`, `--output` | `subunits.json` | Output path |
+| `--split` | `False` | Create separate files per complex |
+| `--max-af-size` | None | Split large sequences into domains |
+
+### run_afm_predictions.py
+
+```bash
+python3 scripts/run_afm_predictions.py <fastas_folder> <pdbs_folder> [options]
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--num-models` | `5` | Number of models per prediction |
+| `--cpu` | `False` | Use CPU only (no GPU) |
+| `--amber` | `False` | Apply AMBER relaxation |
 
 ---
 

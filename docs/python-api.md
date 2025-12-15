@@ -7,6 +7,12 @@ This document provides detailed documentation for all Python scripts and modules
 - [Main Scripts](#main-scripts)
   - [run_on_pdbs.py](#run_on_pdbspy)
   - [prepare_fastas.py](#prepare_fastaspy)
+- [Batch Processing Scripts](#batch-processing-scripts)
+  - [batch_runner.py](#batch_runnerpy)
+  - [run_combfold_job.py](#run_combfold_jobpy)
+  - [run_afm_predictions.py](#run_afm_predictionspy)
+  - [excel_to_subunits.py](#excel_to_subunitspy)
+  - [split_large_subunits.py](#split_large_subunitspy)
 - [Library Modules](#library-modules)
   - [utils_classes.py](#utils_classespy)
   - [utils_pdb.py](#utils_pdbpy)
@@ -254,6 +260,288 @@ def score_pdb_pair(
 Scores a pair prediction based on interface pLDDT.
 
 **Returns:** Tuple of ((subunit1, subunit2), score) or None if invalid.
+
+---
+
+## Batch Processing Scripts
+
+### batch_runner.py
+
+**Location:** `scripts/batch_runner.py`
+
+Multi-GPU batch job orchestrator for processing multiple complexes from an Excel file.
+
+#### Command Line Usage
+
+```bash
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --output-dir results/
+```
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `--excel` | `batch_jobs.xlsx` | Path to Excel file with job specs |
+| `--output-dir` | `results` | Base output directory |
+| `--max-af-size` | `1800` | Max sequence length for AFM |
+| `--num-models` | `5` | Number of AFM models |
+| `--force` | `False` | Re-run completed jobs |
+| `--skip-afm` | `False` | Skip AFM predictions |
+
+#### Key Functions
+
+##### `get_job_status()`
+
+```python
+def get_job_status(job_id: str, output_dir: str = "results") -> str
+```
+
+Check the completion status of a job.
+
+**Returns:** Status string (`not_started`, `subunits_created`, `fastas_created`, `predictions_done`, `completed`)
+
+##### `find_free_gpu()`
+
+```python
+def find_free_gpu() -> Optional[int]
+```
+
+Find an available GPU that is not currently running a job.
+
+**Returns:** GPU ID if available, None if all busy.
+
+##### `detect_gpu_count()`
+
+```python
+def detect_gpu_count() -> int
+```
+
+Auto-detect the number of available GPUs using nvidia-smi.
+
+---
+
+### run_combfold_job.py
+
+**Location:** `scripts/run_combfold_job.py`
+
+Runs the complete CombFold pipeline for a single job on a specific GPU.
+
+#### Command Line Usage
+
+```bash
+python3 scripts/run_combfold_job.py \
+    --gpu 0 \
+    --job_id Complex_001 \
+    --sequences SEQ1 SEQ2 SEQ3
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `--gpu` | Yes | GPU device ID to use |
+| `--job_id` | Yes | Complex_ID (job identifier) |
+| `--sequences` | Yes | Amino acid sequences (space-separated) |
+| `--output_dir` | No | Base output directory (default: results) |
+| `--skip_afm` | No | Skip AFM predictions |
+| `--max_af_size` | No | Max sequence length (default: 1800) |
+| `--num_models` | No | Number of AFM models (default: 5) |
+
+#### Key Functions
+
+##### `run_pipeline()`
+
+```python
+def run_pipeline(
+    job_id: str,
+    sequences: List[str],
+    output_dir: str,
+    gpu_id: int,
+    skip_afm: bool = False,
+    max_af_size: int = 1800,
+    num_models: int = 5
+) -> bool
+```
+
+Run the complete CombFold pipeline for a single job.
+
+**Returns:** True if successful, False otherwise.
+
+---
+
+### run_afm_predictions.py
+
+**Location:** `scripts/run_afm_predictions.py`
+
+Runs ColabFold predictions on all FASTA files in a directory.
+
+#### Command Line Usage
+
+```bash
+python3 scripts/run_afm_predictions.py fastas/ pdbs/ --num-models 5
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `fastas_folder` | Yes | Folder containing FASTA files |
+| `pdbs_folder` | Yes | Output folder for PDB predictions |
+| `--num-models` | No | Number of models (default: 5) |
+| `--cpu` | No | Use CPU only |
+| `--amber` | No | Apply AMBER relaxation |
+
+#### Key Functions
+
+##### `run_colabfold()`
+
+```python
+def run_colabfold(
+    fasta_path: str,
+    output_folder: str,
+    num_models: int = 5,
+    use_gpu: bool = True,
+    amber_relax: bool = False
+) -> Tuple[bool, str]
+```
+
+Run ColabFold batch on a single FASTA file.
+
+**Returns:** Tuple of (success, message).
+
+##### `get_prediction_status()`
+
+```python
+def get_prediction_status(
+    fasta_name: str,
+    output_folder: str,
+    num_models: int
+) -> str
+```
+
+Check prediction status for a FASTA file.
+
+**Returns:** `completed`, `partial`, or `not_started`.
+
+---
+
+### excel_to_subunits.py
+
+**Location:** `scripts/excel_to_subunits.py`
+
+Converts Excel files with protein sequences to CombFold subunits.json format.
+
+#### Command Line Usage
+
+```bash
+# Single complex
+python3 scripts/excel_to_subunits.py sequences.xlsx -o subunits.json
+
+# Multiple complexes
+python3 scripts/excel_to_subunits.py sequences.xlsx --split -o output_dir/
+
+# With sequence splitting
+python3 scripts/excel_to_subunits.py sequences.xlsx --split -o output_dir/ --max-af-size 1800
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `excel_file` | Yes | Path to Excel file |
+| `-o`, `--output` | No | Output path (default: subunits.json) |
+| `--split` | No | Create separate files per complex |
+| `--max-af-size` | No | Split large sequences into domains |
+
+#### Key Functions
+
+##### `row_to_subunits()`
+
+```python
+def row_to_subunits(
+    complex_id: str,
+    sequences: Dict[str, str]
+) -> dict
+```
+
+Convert a single row's data to subunits.json format.
+
+**Returns:** Dictionary in subunits.json format.
+
+##### `sequences_list_to_dict()`
+
+```python
+def sequences_list_to_dict(sequences: List[str]) -> Dict[str, str]
+```
+
+Convert a list of sequences to a dict with chain letters.
+
+**Returns:** Dict mapping chain letters to sequences.
+
+---
+
+### split_large_subunits.py
+
+**Location:** `scripts/split_large_subunits.py`
+
+Splits large protein sequences into domains for CombFold processing.
+
+#### Command Line Usage
+
+```bash
+# Split and save
+python3 scripts/split_large_subunits.py subunits.json -o subunits_split.json
+
+# Check what would be split
+python3 scripts/split_large_subunits.py subunits.json --check
+
+# Custom max size
+python3 scripts/split_large_subunits.py subunits.json -o out.json --max-af-size 1500
+
+# Add overlap between domains
+python3 scripts/split_large_subunits.py subunits.json -o out.json --overlap 50
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `input_file` | Yes | Input subunits.json file |
+| `-o`, `--output` | No | Output file path |
+| `--max-af-size` | No | Max combined size for AFM (default: 1800) |
+| `--overlap` | No | Residue overlap between domains (default: 0) |
+| `--check` | No | Only show what would be split |
+| `--in-place` | No | Modify input file in place |
+
+#### Key Functions
+
+##### `split_subunits_for_af_size()`
+
+```python
+def split_subunits_for_af_size(
+    subunits: dict,
+    max_af_size: int = 1800,
+    overlap: int = 0,
+    verbose: bool = True
+) -> dict
+```
+
+Split all subunits that exceed the maximum AFM prediction size.
+
+**Returns:** New dictionary with split subunits.
+
+##### `needs_splitting()`
+
+```python
+def needs_splitting(subunits: dict, max_af_size: int = 1800) -> bool
+```
+
+Check if any subunit needs splitting.
+
+**Returns:** True if any subunit exceeds max_af_size / 2.
+
+##### `calculate_domain_size()`
+
+```python
+def calculate_domain_size(
+    sequence_length: int,
+    max_af_size: int
+) -> Tuple[int, int]
+```
+
+Calculate optimal domain size and number of domains.
+
+**Returns:** Tuple of (domain_size, num_domains).
 
 ---
 

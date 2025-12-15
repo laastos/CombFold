@@ -155,4 +155,50 @@ By running `scripts/run_on_pdbs.py`:
 python3 scripts/run_on_pdbs.py <path_to_subunits.json> <path_to_folder_of_pdbs> <path_to_empty_output_folder>
 ```
 
+## Batch Processing (Multiple Complexes)
+
+For processing multiple complexes efficiently, CombFold provides a batch processing system with multi-GPU support:
+
+```bash
+# Create Excel file with sequences (Complex_ID, Chain_A, Chain_B, ...)
+# Run batch processing
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --output-dir results/
+```
+
+The batch runner:
+- Auto-detects available GPUs and distributes jobs
+- Handles large sequences by automatically splitting into domains
+- Tracks job completion and resumes interrupted runs
+- Converts Excel input directly to subunits.json format
+
+See `batch_jobs.example.xlsx` for the expected input format.
+
+## Docker Support
+
+CombFold includes Docker support with ColabFold and Blackwell GPU compatibility:
+
+```bash
+# Build image
+docker build -t combfold:latest .
+
+# Run full pipeline
+docker run --gpus all --ipc=host \
+    -v combfold_cache:/cache \
+    -v $(pwd)/data:/data \
+    combfold:latest \
+    /app/docker/scripts/run_pipeline.sh \
+    /data/input/subunits.json \
+    /data/output/my_complex
+
+# Batch processing in Docker
+docker run --gpus all --ipc=host \
+    -v combfold_cache:/cache \
+    -v $(pwd)/batch_jobs.xlsx:/data/batch_jobs.xlsx:ro \
+    -v $(pwd)/results:/data/results \
+    combfold:latest \
+    python3 /app/scripts/batch_runner.py \
+    --excel /data/batch_jobs.xlsx
+```
+
+See `docs/docker.md` for detailed Docker documentation.
 

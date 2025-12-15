@@ -405,8 +405,26 @@ def run_on_pdbs_folder(subunits_json_path: str, pdbs_folder: str, output_path: s
         return
 
     if os.path.exists(output_path) and os.listdir(output_path):
-        print(f"output path {output_path} is not empty, exiting")
-        return
+        # Check if directory only contains empty folders
+        def has_only_empty_folders(path):
+            for item in os.listdir(path):
+                item_path = os.path.join(path, item)
+                if os.path.isfile(item_path):
+                    return False
+                if os.path.isdir(item_path):
+                    if os.listdir(item_path) and not has_only_empty_folders(item_path):
+                        return False
+            return True
+
+        if has_only_empty_folders(output_path):
+            print(f"output path {output_path} contains only empty folders, cleaning up and continuing...")
+            for item in os.listdir(output_path):
+                item_path = os.path.join(output_path, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+        else:
+            print(f"output path {output_path} is not empty, exiting")
+            return
 
     subunits_info: SubunitsInfo = read_subunits_info(subunits_json_path)
 

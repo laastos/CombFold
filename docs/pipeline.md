@@ -10,6 +10,7 @@ This document provides a comprehensive guide to the CombFold pipeline, covering 
 - [Stage 3: Predicting Groups (Optional)](#stage-3-predicting-groups-optional)
 - [Stage 4: Combinatorial Assembly](#stage-4-combinatorial-assembly)
 - [Data Flow Diagram](#data-flow-diagram)
+- [Batch Processing](#batch-processing)
 
 ## Pipeline Overview
 
@@ -500,6 +501,95 @@ Scores are based on:
 │  └─────────────────────────────────────────┘                            │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Batch Processing
+
+For processing multiple complexes efficiently, CombFold provides a batch processing system that automates the entire pipeline and distributes jobs across multiple GPUs.
+
+### Batch Processing Components
+
+| Script | Purpose |
+|--------|---------|
+| `batch_runner.py` | Multi-GPU job orchestrator |
+| `run_combfold_job.py` | Single job pipeline executor |
+| `run_afm_predictions.py` | ColabFold prediction runner |
+| `excel_to_subunits.py` | Excel to subunits.json converter |
+| `split_large_subunits.py` | Large sequence domain splitter |
+
+### Excel Input Format
+
+Define multiple complexes in an Excel file (`batch_jobs.xlsx`):
+
+| Complex_ID | Chain_A | Chain_B | Chain_C |
+|------------|---------|---------|---------|
+| Complex_001 | MKTAYIAK... | MVLSPAD... | |
+| Complex_002 | MDKLEQK... | MFDKILI... | MGDKIES... |
+
+### Running Batch Jobs
+
+```bash
+# Basic batch run (auto-detects GPUs)
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx
+
+# With options
+python3 scripts/batch_runner.py \
+    --excel batch_jobs.xlsx \
+    --output-dir results/ \
+    --max-af-size 1800 \
+    --num-models 5
+
+# Force re-run completed jobs
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --force
+
+# Skip AFM predictions (use existing PDBs)
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx --skip-afm
+```
+
+### Batch Output Structure
+
+```
+results/
+├── Complex_001/
+│   ├── subunits.json
+│   ├── fastas/
+│   ├── pdbs/
+│   └── output/
+│       └── assembled_results/
+│           ├── output_clustered_0.pdb
+│           └── confidence.txt
+├── Complex_002/
+│   └── ...
+```
+
+### Large Sequence Handling
+
+For sequences exceeding the AFM size limit, use the domain splitter:
+
+```bash
+# Check what would be split
+python3 scripts/split_large_subunits.py subunits.json --check
+
+# Split large sequences
+python3 scripts/split_large_subunits.py subunits.json -o subunits_split.json --max-af-size 1800
+
+# With overlap between domains
+python3 scripts/split_large_subunits.py subunits.json -o subunits_split.json --overlap 50
+```
+
+The batch runner automatically handles large sequences when `--max-af-size` is specified.
+
+### Converting Excel to Subunits
+
+```bash
+# Single complex
+python3 scripts/excel_to_subunits.py sequences.xlsx -o subunits.json
+
+# Multiple complexes (separate directories)
+python3 scripts/excel_to_subunits.py sequences.xlsx --split -o output_dir/
+
+# With automatic sequence splitting
+python3 scripts/excel_to_subunits.py sequences.xlsx --split -o output_dir/ --max-af-size 1800
 ```
 
 ## See Also

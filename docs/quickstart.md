@@ -199,6 +199,53 @@ Your PDB files don't contain all subunits defined in `subunits.json`. Ensure:
 - All sequences in `subunits.json` match sequences in your PDB files
 - At least one PDB file contains each subunit
 
+## Batch Processing (Multiple Complexes)
+
+For processing multiple complexes efficiently, use the batch runner:
+
+### A. Create an Excel File
+
+Create `batch_jobs.xlsx` with your sequences:
+
+| Complex_ID | Chain_A | Chain_B | Chain_C |
+|------------|---------|---------|---------|
+| Complex_001 | MKTAYIAK... | MVLSPAD... | |
+| Complex_002 | MDKLEQK... | MFDKILI... | MGDKIES... |
+
+### B. Run Batch Processing
+
+```bash
+# Basic batch run (auto-detects GPUs)
+python3 scripts/batch_runner.py --excel batch_jobs.xlsx
+
+# With Docker
+docker run --gpus all --ipc=host \
+    -v combfold_cache:/cache \
+    -v $(pwd)/batch_jobs.xlsx:/data/batch_jobs.xlsx:ro \
+    -v $(pwd)/results:/data/results \
+    combfold:latest \
+    python3 /app/scripts/batch_runner.py \
+    --excel /data/batch_jobs.xlsx \
+    --output-dir /data/results
+```
+
+### C. Results
+
+Results are organized per complex:
+
+```
+results/
+├── Complex_001/
+│   ├── subunits.json
+│   ├── fastas/
+│   ├── pdbs/
+│   └── output/assembled_results/
+│       ├── output_clustered_0.pdb
+│       └── confidence.txt
+└── Complex_002/
+    └── ...
+```
+
 ## Next Steps
 
 - [Pipeline Guide](pipeline.md) - Understand all 4 stages in detail

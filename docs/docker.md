@@ -14,14 +14,16 @@ This guide covers running CombFold with LocalColabFold using Docker, providing a
 - [GPU Configuration](#gpu-configuration)
 - [Blackwell GPU Support](#blackwell-gpu-support)
 - [Troubleshooting](#troubleshooting)
+- [Batch Processing in Docker](#batch-processing-in-docker)
 
 ## Overview
 
 The Docker image combines:
 
 - **CombFold** - Combinatorial assembly algorithm for large protein complexes
-- **LocalColabFold** - Local installation of ColabFold for AlphaFold-Multimer predictions
-- **NGC JAX 25.01** - NVIDIA NGC container with native Blackwell (CC 12.0) GPU support
+- **ColabFold 1.5.5** - Pip-installed ColabFold for AlphaFold-Multimer predictions
+- **NVIDIA CUDA 12.4** - Base image with Python 3.10 for ColabFold compatibility
+- **JAX 0.6.x** - With CUDA 12 support and Blackwell GPU compatibility
 - **All dependencies** - Boost, Python packages, optimized CUDA libraries
 
 This provides a complete, reproducible environment for the entire CombFold pipeline with support for the latest NVIDIA GPUs including Blackwell architecture (RTX 50 series, RTX PRO 6000, etc.).
@@ -115,16 +117,17 @@ docker run --gpus all --ipc=host \
 
 ## Building the Image
 
-### Standard Build (NGC JAX with Blackwell Support)
+### Standard Build (CUDA 12.4 with Blackwell Support)
 
 ```bash
 docker build -t combfold:latest .
 ```
 
-The image uses `nvcr.io/nvidia/jax:25.01-py3` as the base, which includes:
-- CUDA 12.x with Blackwell (CC 12.0) support
-- Optimized JAX for NVIDIA GPUs
-- Native bf16 support for Blackwell architecture
+The image uses `nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04` as the base, which includes:
+- CUDA 12.4 with cuDNN for deep learning
+- Python 3.10 (required for ColabFold compatibility)
+- JAX 0.6.x with CUDA 12 support and Blackwell (CC 12.0) compatibility
+- AlphaFold patched for JAX 0.6.x API changes
 
 ### Build with Docker Compose
 
@@ -504,6 +507,83 @@ Convert for HPC use:
 ```bash
 singularity pull docker://combfold:latest
 singularity run --nv combfold_latest.sif colabfold_batch ...
+```
+
+## Batch Processing in Docker
+
+For processing multiple complexes, use the batch runner with Docker:
+
+### Using Excel Input
+
+```bash
+# Mount Excel file and results directory
+docker run --gpus all --ipc=host \
+    -v combfold_cache:/cache \
+    -v $(pwd)/batch_jobs.xlsx:/data/batch_jobs.xlsx:ro \
+    -v $(pwd)/results:/data/results \
+    combfold:latest \
+    python3 /app/scripts/batch_runner.py \
+    --excel /data/batch_jobs.xlsx \
+    --output-dir /data/results
+```
+
+### Batch Runner Options
+
+| Option | Description |
+|--------|-------------|
+| `--excel` | Path to Excel file with job specifications |
+| `--output-dir` | Base output directory (default: results) |
+| `--max-af-size` | Max combined sequence length for AFM (default: 1800) |
+| `--num-models` | Number of AFM models per prediction (default: 5) |
+| `--force` | Re-run all jobs even if completed |
+| `--skip-afm` | Skip AFM predictions (use existing PDBs) |
+
+### Multi-GPU Distribution
+
+The batch runner automatically detects and distributes jobs across all available GPUs:
+
+```bash
+# Auto-detects GPUs
+docker run --gpus all ...
+
+# Limit to specific GPUs
+docker run --gpus '"device=0,1,2"' ...
+```
+
+### Job Status Tracking
+
+Jobs are tracked through completion states:
+- `not_started`: No job directory exists
+- `subunits_created`: Has subunits.json only
+- `fastas_created`: Has FASTA files but no predictions
+- `predictions_done`: Has PDBs but no assembly
+- `completed`: Has assembled results
+
+### Example Batch Workflow
+
+```bash
+# 1. Create Excel file with sequences
+# Format: Complex_ID, Chain_A, Chain_B, Chain_C, ...
+
+# 2. Build image
+docker build -t combfold:latest .
+
+# 3. Create cache volume
+docker volume create combfold_cache
+
+# 4. Run batch processing
+docker run --gpus all --ipc=host \
+    -v combfold_cache:/cache \
+    -v $(pwd)/batch_jobs.xlsx:/data/batch_jobs.xlsx:ro \
+    -v $(pwd)/results:/data/results \
+    combfold:latest \
+    python3 /app/scripts/batch_runner.py \
+    --excel /data/batch_jobs.xlsx \
+    --output-dir /data/results \
+    --max-af-size 1800 \
+    --num-models 5
+
+# 5. Results are in results/<Complex_ID>/output/assembled_results/
 ```
 
 ## See Also
